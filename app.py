@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import json
-from langchain.vectorstores import FAISS
+# from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_ollama import OllamaLLM
 from langchain.chains import RetrievalQA
