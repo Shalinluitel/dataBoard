@@ -3,4 +3,6 @@ plotly
 langchain
 langchain-ollama
 sentence-transformers
-faiss-cpu
+transformers
+torch
+chromadb
