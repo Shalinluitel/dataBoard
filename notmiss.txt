@@ -1,0 +1,10 @@
+/Users/shalin/Desktop/data2dashboard/.conda/bin/python -m streamlit run app.py
+
+if I am making a PowerBI dashboard from this dataset, what are the charts I can make as an insightful visualization?
+
+
+if I am making a PowerBI dashboard from this dataset, what are the charts I can make as an insightful visualization. Just list the insightful observations and do not make any charts. Just write them down.
+
+what is the average house price?
+
+You will answer in json format only with the keys being x and y, like this'
