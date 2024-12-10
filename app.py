@@ -7,6 +7,7 @@ from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_ollama import OllamaLLM
 from langchain.chains import RetrievalQA
 from langchain.schema import Document
+from langchain.vectorstores import Chroma
 
 # Configure the LLM model for Llama3 via Ollama
 def configure_ollama_llama():
@@ -55,7 +56,8 @@ def create_langchain_rag_tool(data):
         for idx, row in data.iterrows()
     ]
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    vectorstore = FAISS.from_documents(documents, embeddings)
+    #vectorstore = FAISS.from_documents(documents, embeddings)
+    vectorstore = Chroma.from_documents(documents, embeddings)
     retriever = vectorstore.as_retriever()
     qa = RetrievalQA.from_chain_type(
         llm=llama_model,
