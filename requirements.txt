@@ -1,4 +1,6 @@
+streamlit
 plotly
 langchain
-sentence-transformers
 langchain-ollama
+sentence-transformers
+faiss-cpu
