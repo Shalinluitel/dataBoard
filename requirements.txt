@@ -6,3 +6,4 @@ sentence-transformers
 transformers
 torch
 chromadb
+langchain-community
