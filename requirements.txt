@@ -8,3 +8,5 @@ torch
 chromadb
 faiss-cpu
 langchain-community
+json
+re

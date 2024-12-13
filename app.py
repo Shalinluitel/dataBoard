@@ -7,6 +7,8 @@ from langchain_ollama import OllamaLLM
 from langchain.chains import RetrievalQA
 from langchain.schema import Document
 # from langchain.vectorstores import Chroma
+import re
+import json
 from langchain.vectorstores import FAISS
 
 
@@ -155,12 +157,39 @@ def generate_human_response(df):
         st.error(f"An error occurred while generating textual insights: {e}")
         return None
 
-# Function to generate JSON insights
+def extract_first_json_object(text: str) -> str:
+    text = text.strip()
+    first_brace_index = text.find('{')
+    if first_brace_index == -1:
+        raise ValueError("No JSON object found in the response.")
+
+    # We will match braces starting from the first '{' and try to find its corresponding '}'.
+    brace_count = 0
+    for i, ch in enumerate(text[first_brace_index:], start=first_brace_index):
+        if ch == '{':
+            brace_count += 1
+        elif ch == '}':
+            brace_count -= 1
+            if brace_count == 0:
+                # We found a complete JSON object substring
+                json_substring = text[first_brace_index:i+1].strip()
+                # Attempt to parse it
+                try:
+                    json.loads(json_substring)
+                    # If this works, return the substring
+                    return json_substring
+                except json.JSONDecodeError:
+                    # If parsing failed, continue searching (though this should be rare)
+                    pass
+
+    raise ValueError("No valid JSON object could be extracted from the response.")
+
 def generate_structured_response(df, human_response):
     st.subheader("Llama3 Structured Insights")
     try:
         if not human_response or len(human_response.strip()) == 0:
             raise ValueError("The human response is empty or invalid.")
+        
         json_query = f"""
             Based on the following analysis:
             {human_response}
@@ -177,38 +206,37 @@ def generate_structured_response(df, human_response):
                 "justifications": ["Explanation for each chart"]
             }}
 
-            Ensure the JSON is complete and valid wihtout any outside texts YOUR OUTPUT MUST BE JSON ONLY. Focus on creating meaningful visualizations that reveal insights from the data. Again, YOUR OUTPUT MUST BE JSON ONLY, no other outside text.
-            """
+            Ensure the JSON is complete and valid without any outside texts. 
+            YOUR OUTPUT MUST BE JSON ONLY. 
+            Focus on creating meaningful visualizations that reveal insights from the data. 
+            Again, YOUR OUTPUT MUST BE JSON ONLY, no other outside text.
+        """
+        
         st.write("### Generating Structured Insights...")
         qa_tool = create_langchain_rag_tool(df)
         structured_response = qa_tool.run(json_query)
         print(f"Raw JSON response: {structured_response}")
+
         if not structured_response or len(structured_response.strip()) == 0:
             raise ValueError("The LLM did not return any structured response.")
-        try:
-            # Try to clean up the JSON response
-            # Remove any text before or after the JSON
-            import re
-            json_match = re.search(r'\{.*\}', structured_response, re.DOTALL)
-            if json_match:
-                structured_response = json_match.group(0)
-            
-            structured_data = json.loads(structured_response)
-            print(f"Structured data type: {type(structured_data)}")
-            st.write("### Structured Insights (for Charts):")
-            st.json(structured_data)
-            dict_to_plotly(df, structured_data)  # Pass data and chart dict to function
-            return structured_data
-        except json.JSONDecodeError as e:
-            print("Failed to parse JSON response:", e)
-            st.error("The AI's response was not valid JSON. Please try again.")
-            st.write("### Raw AI Response (Debugging):")
-            st.code(structured_response)
-            return None
+        
+        # Extract the first valid JSON object
+        structured_json_str = extract_first_json_object(structured_response)
+
+        # Parse the extracted JSON
+        structured_data = json.loads(structured_json_str)
+        print(f"Structured data type: {type(structured_data)}")
+        st.write("### Structured Insights (for Charts):")
+        st.json(structured_data)
+        dict_to_plotly(df, structured_data)
+        return structured_data
+
     except Exception as e:
         print(f"Error during structured insights generation: {e}")
         st.error(f"An error occurred while generating structured insights: {e}")
         return None
+
+
 
 
 
