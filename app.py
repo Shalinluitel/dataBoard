@@ -11,7 +11,9 @@ from langchain.vectorstores import FAISS
 
 
 from langchain.llms import HuggingFaceHub
-llama_model = HuggingFaceHub(repo_id="meta-llama/Llama-3.2-3B-Instruct", huggingface_api_key="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")
+llama_model = HuggingFaceHub(repo_id="meta-llama/Llama-3.2-3B-Instruct", huggingfacehub_api_token="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")
+
+# llama_model = HuggingFaceHub(repo_id="meta-llama/Llama-3.2-3B-Instruct", huggingface_api_key="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")
 
 
 # # Configure the LLM model for Llama3 via Ollama
