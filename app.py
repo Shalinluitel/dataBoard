@@ -9,14 +9,19 @@ from langchain.schema import Document
 # from langchain.vectorstores import Chroma
 from langchain.vectorstores import FAISS
 
-# Configure the LLM model for Llama3 via Ollama
-def configure_ollama_llama():
-    return OllamaLLM(
-        model="llama3.2",  # Use the llama3.2 model
-        base_url="http://localhost:11434"  # Ollama's default API endpoint
-    )
 
-llama_model = configure_ollama_llama()
+from langchain.llms import HuggingFaceHub
+llama_model = HuggingFaceHub(repo_id="meta-llama/Llama-3.2-3B-Instruct", huggingface_api_key="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")
+
+
+# # Configure the LLM model for Llama3 via Ollama
+# def configure_ollama_llama():
+#     return OllamaLLM(
+#         model="llama3.2",  # Use the llama3.2 model
+#         base_url="http://localhost:11434"  # Ollama's default API endpoint
+#     )
+
+# llama_model = configure_ollama_llama()
 
 st.title("Interactive Dashboard with Llama3 (Ollama) and LangChain Insights")
 
