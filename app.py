@@ -141,8 +141,7 @@ def generate_human_response(df):
     try:
         human_query = """
             Analyze this dataset in detail by looking at its rows and columns.
-            Provide a textual summary of key patterns, trends, and correlations.
-            Suggest meaningful observations based on this data.
+            Provide a short textual summary of key patterns, trends, and correlations and write them in just bullet points.
         """
         st.write("### Generating Textual Insights...")
         qa_tool = create_langchain_rag_tool(df)
@@ -178,7 +177,7 @@ def generate_structured_response(df, human_response):
                 "justifications": ["Explanation for each chart"]
             }}
 
-            Ensure the JSON is complete and valid wihtout any outside texts. Focus on creating meaningful visualizations that reveal insights from the data.
+            Ensure the JSON is complete and valid wihtout any outside texts YOUR OUTPUT MUST BE JSON ONLY. Focus on creating meaningful visualizations that reveal insights from the data. Again, YOUR OUTPUT MUST BE JSON ONLY, no other outside text.
             """
         st.write("### Generating Structured Insights...")
         qa_tool = create_langchain_rag_tool(df)
