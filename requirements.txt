@@ -6,4 +6,5 @@ sentence-transformers
 transformers
 torch
 chromadb
+faiss-cpu
 langchain-community
