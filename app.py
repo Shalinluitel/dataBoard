@@ -8,15 +8,22 @@ from langchain_ollama import OllamaLLM
 from langchain.chains import RetrievalQA
 from langchain.schema import Document
 from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.llms import HuggingFaceHub
 
-# Configure the LLM model for Llama3 via Ollama (as in the backup code)
-def configure_ollama_llama():
-    return OllamaLLM(
-        model="llama3.2",  # Use the llama3.2 model
-        base_url="http://localhost:11434"  # Ollama's default API endpoint
-    )
+# # Configure the LLM model for Llama3 via Ollama (as in the backup code)
+# def configure_ollama_llama():
+#     return OllamaLLM(
+#         model="llama3.2",  # Use the llama3.2 model
+#         base_url="http://localhost:11434"  # Ollama's default API endpoint
+#     )
 
-llama_model = configure_ollama_llama()
+# llama_model = configure_ollama_llama()
+
+# Replace Ollama configuration with HuggingFaceHub
+llama_model = HuggingFaceHub(
+    repo_id="meta-llama/Llama-3.2-3B-Instruct",
+    huggingfacehub_api_token="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"
+)
 
 st.title("Interactive Dashboard with Llama3 and LangChain Insights")
 
