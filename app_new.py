@@ -2,31 +2,55 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import json
-import numpy as np
-from langchain.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_ollama import OllamaLLM
 from langchain.chains import RetrievalQA
 from langchain.schema import Document
-from langchain.embeddings import HuggingFaceEmbeddings
+# from langchain.vectorstores import Chroma
+import re
+import json
+from langchain.vectorstores import FAISS
+import numpy as np
 
-# Configure the LLM model for Llama3 via Ollama (as in the backup code)
-def configure_ollama_llama():
-    return OllamaLLM(
-        model="llama3.2",  # Use the llama3.2 model
-        base_url="http://localhost:11434"  # Ollama's default API endpoint
-    )
 
-llama_model = configure_ollama_llama()
+from langchain.llms import HuggingFaceHub
+llama_model = HuggingFaceHub(repo_id="meta-llama/Llama-3.2-3B-Instruct", huggingfacehub_api_token="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")
 
-st.title("Interactive Dashboard with Llama3 and LangChain Insights")
+# llama_model = HuggingFaceHub(repo_id="meta-llama/Llama-3.2-3B-Instruct", huggingface_api_key="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")
 
+
+# # Configure the LLM model for Llama3 via Ollama
+# def configure_ollama_llama():
+#     return OllamaLLM(
+#         model="llama3.2",  # Use the llama3.2 model
+#         base_url="http://localhost:11434"  # Ollama's default API endpoint
+#     )
+
+# llama_model = configure_ollama_llama()
+
+st.title("Interactive Dashboard with Llama3 (Ollama) and LangChain Insights")
+
+def classify_columns(df):
+    categorical = [col for col in df.columns if df[col].dtype == "object"]
+    numerical = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    time_based = [col for col in df.columns if is_time_column(df[col])]
+    return categorical, numerical, time_based
+
+
+
+# Function to identify time-based columns
 def is_time_column(series):
     try:
+        # Attempt to convert to datetime
         parsed_dates = pd.to_datetime(series, errors='coerce')
+        # Check if more than 50% of values are valid datetimes
         return parsed_dates.notna().mean() > 0.5
     except Exception:
         return False
 
+
+
+# Function to clean and prepare data
 def clean_data(df):
     df = df.dropna(how="all", axis=1)
     df = df.dropna(how="all", axis=0)
@@ -35,23 +59,17 @@ def clean_data(df):
         df.columns = pd.io.parsers.ParserBase({'names': df.columns})._maybe_dedup_names(df.columns)
     return df
 
-def classify_columns(df):
-    categorical = [col for col in df.columns if df[col].dtype == "object"]
-    numerical = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
-    time_based = [col for col in df.columns if is_time_column(df[col])]
-    return categorical, numerical, time_based
-
 def create_langchain_rag_tool(data):
-    # Convert each row into a Document
-    documents = [
-        Document(page_content=" ".join(row.astype(str)), metadata={"index": idx})
-        for idx, row in data.iterrows()
-    ]
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    vectorstore = FAISS.from_documents(documents, embeddings)
-    retriever = vectorstore.as_retriever()
+    # Instead of using entire rows, let's provide a single summary doc
+    summary_doc = Document(
+        page_content="This document describes the dataset. The following are the columns and their statistics, as well as correlation metrics. Use this information to answer questions about the dataset.",
+        metadata={"source": "dataset_summary"}
+    )
 
-    # Use default "stuff" chain without any custom prompts
+    # You can also add more structured docs if needed, but here one should suffice.
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    vectorstore = FAISS.from_documents([summary_doc], embeddings)
+    retriever = vectorstore.as_retriever()
     qa = RetrievalQA.from_chain_type(
         llm=llama_model,
         retriever=retriever,
@@ -59,6 +77,66 @@ def create_langchain_rag_tool(data):
     )
     return qa
 
+
+def convert_numpy_types(obj):
+    """Recursively convert numpy types in dictionaries/lists to native Python types."""
+    if isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(i) for i in obj]
+    elif pd.api.types.is_integer(obj) or isinstance(obj, (np.int64, np.int32, np.int16, np.integer)):
+        return int(obj)
+    elif pd.api.types.is_float(obj) or isinstance(obj, (np.float64, np.float32, np.floating)):
+        return float(obj)
+    else:
+        return obj
+
+def compute_data_overview(df):
+    overview = {}
+    overview['shape'] = (int(df.shape[0]), int(df.shape[1]))  # Ensure shape is tuple of standard ints
+    overview['columns'] = []
+    for col in df.columns:
+        col_info = {
+            'name': col,
+            'dtype': str(df[col].dtype),
+        }
+        if pd.api.types.is_numeric_dtype(df[col]):
+            # Convert values to native Python types
+            col_info['mean'] = float(df[col].mean())
+            col_info['median'] = float(df[col].median())
+            col_info['min'] = float(df[col].min())
+            col_info['max'] = float(df[col].max())
+            col_info['std'] = float(df[col].std())
+        else:
+            # Value counts can have numpy integers, convert them
+            unique_vals = df[col].value_counts().to_dict()
+            # Convert unique_vals numeric keys and values to Python types
+            unique_vals_converted = {}
+            for k, v in unique_vals.items():
+                # keys in value_counts dict can be strings or ints
+                # Ensure v is int
+                unique_vals_converted[str(k)] = int(v)
+            col_info['value_counts'] = unique_vals_converted
+        overview['columns'].append(col_info)
+    
+    # Compute correlation matrix for numeric data
+    numeric_cols = df.select_dtypes(include=[float, int]).columns
+    if len(numeric_cols) > 1:
+        corr_df = df[numeric_cols].corr().round(2)
+        # Convert correlation matrix to a JSON-serializable dict with native floats
+        corr_dict = corr_df.to_dict()
+        # Convert np.float64 in corr_dict to float
+        corr_dict = convert_numpy_types(corr_dict)
+        overview['correlations'] = corr_dict
+    else:
+        overview['correlations'] = "Not enough numeric columns for correlation."
+
+    # Convert all remaining numpy types in overview
+    overview = convert_numpy_types(overview)
+    return overview
+
+
+# Updated Function to process structured dictionary and generate Plotly charts
 def dict_to_plotly(data, chart_dict):
     st.subheader("Charts from Dictionary")
     charts = chart_dict.get("charts", [])
@@ -68,6 +146,7 @@ def dict_to_plotly(data, chart_dict):
         st.warning("No valid charts found in the structured data.")
         return
 
+    # Determine available numerical and categorical columns
     categorical_columns = [col for col in data.columns if data[col].dtype == 'object']
     numerical_columns = [col for col in data.columns if pd.api.types.is_numeric_dtype(data[col])]
 
@@ -80,21 +159,27 @@ def dict_to_plotly(data, chart_dict):
         with st.expander(f"{title}"):
             st.write(f"**Justification:** {justification}")
             
+            # Smart axis selection if not enough axes are provided
             if len(axes) < 2:
+                # Priority: Use explicitly recommended columns if available
                 x_axis = axes[0] if axes else (numerical_columns[0] if numerical_columns else None)
                 y_axis = (numerical_columns[1] if len(numerical_columns) > 1 else 
                           numerical_columns[0] if numerical_columns else None)
+                
+                # Fallback if no numerical columns
                 if x_axis is None or y_axis is None:
                     st.warning(f"Could not generate chart for {title}: Insufficient data columns.")
                     continue
             else:
                 x_axis, y_axis = axes[:2]
 
+            # Validate column existence
             if x_axis not in data.columns or y_axis not in data.columns:
                 st.warning(f"Columns {x_axis} or {y_axis} not found. Using default columns.")
                 x_axis = numerical_columns[0]
                 y_axis = numerical_columns[1] if len(numerical_columns) > 1 else numerical_columns[0]
 
+            # Generate chart based on type with smart fallbacks
             try:
                 if chart_type == "scatter":
                     fig = px.scatter(data, x=x_axis, y=y_axis, title=title)
@@ -103,6 +188,7 @@ def dict_to_plotly(data, chart_dict):
                 elif chart_type == "boxplot":
                     fig = px.box(data, x=x_axis, y=y_axis, title=title)
                 else:
+                    # Default to scatter if chart type is unknown
                     st.warning(f"Unknown chart type {chart_type}. Defaulting to scatter plot.")
                     fig = px.scatter(data, x=x_axis, y=y_axis, title=title)
                 
@@ -115,20 +201,30 @@ def dict_to_plotly(data, chart_dict):
 def generate_human_response(df):
     st.subheader("Llama3 Textual Insights")
     try:
-        # A simple human query, no strict instructions
-        human_query = """
-        Analyze this dataset in detail by looking at its rows and columns.
-        Provide a textual summary of key patterns, trends, and correlations.
-        Suggest meaningful observations based on this data.
+        data_overview = compute_data_overview(df)
+        # Now data_overview is safe to use with json.dumps
+        human_query = f"""
+        You are given the following dataset summary:
+        - Shape: {data_overview['shape']}
+        - Columns and their statistics:
+        {json.dumps(data_overview['columns'], indent=2)}
+        
+        Correlations among numerical columns:
+        {json.dumps(data_overview['correlations'], indent=2)}
+        
+        Based on this summary:
+        • Identify key patterns or trends in the data.
+        • Point out which columns correlate strongly.
+        • Highlight any notable distributions or outliers.
+        • Keep it concise and in bullet points only.
         """
+        
         st.write("### Generating Textual Insights...")
         qa_tool = create_langchain_rag_tool(df)
         human_response = qa_tool.run(human_query)
-
+        
         if not human_response or len(human_response.strip()) == 0:
             raise ValueError("The LLM returned an empty response for textual insights.")
-
-        # This will print just what the model returns, similar to the backup scenario
         st.write("### Human-readable Insights:")
         st.text(human_response)
         return human_response
@@ -142,25 +238,42 @@ def generate_structured_response(df, human_response):
         if not human_response or len(human_response.strip()) == 0:
             raise ValueError("The human response is empty or invalid.")
 
+        # Emphasize the need for meaningful charts
         json_query = f"""
-        Based on the following analysis:
+        You have provided this textual summary of insights:
         {human_response}
 
-        Generate structured insights in JSON format with this EXACT structure:
+        Now, propose 2-3 charts in JSON format to visualize the mentioned patterns.
+        For example, if you identified strong correlations between two numeric columns, propose a scatter plot.
+        If a categorical column has an interesting distribution, propose a bar chart of counts.
+        If a numeric column has outliers, propose a box plot of that numeric column.
+
+        Return exactly in this JSON structure:
         {{
-            "charts": [
-                {{
-                    "type": "scatter|bar|boxplot",
-                    "title": "Chart Title",
-                    "axes": ["column_name_x", "column_name_y"]
-                }}
-            ],
-            "justifications": ["Explanation for each chart"]
+          "charts": [
+            {{
+              "type": "scatter|bar|boxplot",
+              "title": "A meaningful title",
+              "axes": ["x_column", "y_column"]
+            }},
+            {{
+              "type": "scatter|bar|boxplot",
+              "title": "Another chart title",
+              "axes": ["x_column", "y_column"]
+            }}
+          ],
+          "justifications": [
+            "Explain why this chart helps visualize the pattern",
+            "Explain why this second chart helps visualize the pattern"
+          ]
         }}
 
-        Ensure the JSON is complete and valid without any outside text.
-        Focus on creating meaningful visualizations that reveal insights from the data.
+        Make sure:
+        - Only valid JSON is returned, no extra text.
+        - The chart types chosen reflect the insights discussed.
+        - The axes refer to actual column names from the data.
         """
+
         st.write("### Generating Structured Insights...")
         qa_tool = create_langchain_rag_tool(df)
         structured_response = qa_tool.run(json_query)
@@ -168,40 +281,34 @@ def generate_structured_response(df, human_response):
 
         if not structured_response or len(structured_response.strip()) == 0:
             raise ValueError("The LLM did not return any structured response.")
+        
+        structured_json_str = extract_first_json_object(structured_response)
+        structured_data = json.loads(structured_json_str)
 
-        try:
-            import re
-            json_match = re.search(r'\{.*\}', structured_response, re.DOTALL)
-            if json_match:
-                structured_response = json_match.group(0)
-            
-            structured_data = json.loads(structured_response)
-            print(f"Structured data type: {type(structured_data)}")
-            st.write("### Structured Insights (for Charts):")
-            st.json(structured_data)
-            dict_to_plotly(df, structured_data)
-            return structured_data
-        except json.JSONDecodeError as e:
-            print("Failed to parse JSON response:", e)
-            st.error("The AI's response was not valid JSON. Please try again.")
-            st.write("### Raw AI Response (Debugging):")
-            st.code(structured_response)
-            return None
+        st.write("### Structured Insights (for Charts):")
+        st.json(structured_data)
+        dict_to_plotly(df, structured_data)
+        return structured_data
     except Exception as e:
         print(f"Error during structured insights generation: {e}")
         st.error(f"An error occurred while generating structured insights: {e}")
         return None
 
+
 def create_interactive_dashboard(data):
     st.subheader("Interactive Dashboard (Manual)")
     categorical, numerical, time_based = classify_columns(data)
 
+    # Add a toggle to ask the user if there is time-based data
     use_time_based = st.checkbox("Click this Checkbox if you have a Time-Based Columns.")
 
     if use_time_based:
         if time_based:
             st.write("### Time-Based Columns:")
+            #st.write(time_based)
             selected_time_column = st.selectbox("Select a Time-Based Column", time_based)
+
+            # If numerical columns exist, allow plotting time-based line chart
             if numerical:
                 y_axis = st.selectbox("Select a Numerical Column for Y-Axis", numerical)
                 line_chart = px.line(
@@ -216,6 +323,7 @@ def create_interactive_dashboard(data):
         else:
             st.warning("No time-based columns found in the dataset.")
 
+    # Categorical and numerical filtering
     if categorical and numerical:
         st.write("### Categorical and Numerical Data")
         selected_category = st.selectbox("Filter by Categorical Column", categorical)
@@ -228,6 +336,7 @@ def create_interactive_dashboard(data):
             else data[data[selected_category] == selected_category_value]
         )
 
+        # Display charts for filtered data
         col1, col2 = st.columns(2)
 
         with col1:
@@ -241,25 +350,26 @@ def create_interactive_dashboard(data):
             st.plotly_chart(bar_chart, use_container_width=True)
 
         with col2:
-            if len(numerical) > 1:
-                scatter_chart = px.scatter(
-                    filtered_data,
-                    x=numerical[0],
-                    y=numerical[1],
-                    title=f"Scatter Plot: {numerical[0]} vs {numerical[1]}",
-                    color=categorical[0],
-                )
-                st.plotly_chart(scatter_chart, use_container_width=True)
-            else:
-                st.warning("Not enough numerical columns for a scatter plot.")
+            scatter_chart = px.scatter(
+                filtered_data,
+                x=numerical[0],
+                y=numerical[1] if len(numerical) > 1 else numerical[0],
+                title=f"Scatter Plot: {numerical[0]} vs {numerical[1] if len(numerical) > 1 else numerical[0]}",
+                color=categorical[0],
+            )
+            st.plotly_chart(scatter_chart, use_container_width=True)
     else:
         st.warning("No sufficient categorical or numerical data available for visualization.")
 
+
+# Main Streamlit app logic
 def main():
     uploaded_file = st.file_uploader("Upload a CSV file", type=['csv'])
     if uploaded_file is not None:
         try:
             data = pd.read_csv(uploaded_file)
+            print("DataFrame loaded successfully.")
+            print(f"DataFrame Head:\n{data.head()}")
             data = clean_data(data)
             dashboard_option = st.sidebar.radio(
                 "Select Dashboard",
@@ -279,6 +389,7 @@ def main():
                 else:
                     st.warning("No structured insights found. Please generate textual insights first.")
         except Exception as e:
+            print(f"Error: {e}")
             st.error(f"An error occurred: {e}")
 
 if __name__ == "__main__":
