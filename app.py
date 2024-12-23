@@ -155,7 +155,6 @@ def generate_structured_response(df, human_response):
                 "justifications": ["Explanation for each chart"]
             }}
 
-            Ensure the JSON is complete and valid wihtout any outside texts. Focus on creating meaningful visualizations that reveal insights from the data.
             """
         st.write("### Generating Structured Insights...")
         qa_tool = create_langchain_rag_tool(df)
